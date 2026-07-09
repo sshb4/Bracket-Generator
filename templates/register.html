@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Register | Bracket Maker{% endblock %}
+{% block content %}
+<section class="card auth-card">
+  <h1>Create Account</h1>
+  <p class="sub">Simple username + password setup.</p>
+
+  <form method="post" class="stack">
+    <label>Username</label>
+    <input type="text" name="username" required />
+
+    <label>Password</label>
+    <input type="password" name="password" required />
+
+    <button type="submit">Register</button>
+  </form>
+
+  <p class="muted">Already have one? <a href="{{ url_for('login') }}">Log in</a>.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Dashboard | Bracket Maker{% endblock %}
+{% block content %}
+<section class="dashboard-head">
+  <div>
+    <h1>{{ user['username'] }}'s Brackets</h1>
+    <p class="sub">Create, update picks, and share with one link.</p>
+  </div>
+  <a class="button-like" href="{{ url_for('new_bracket') }}">Create New</a>
+</section>
+
+{% if cards %}
+<section class="grid cards">
+  {% for card in cards %}
+  <article class="card bracket-card">
+    <h3>{{ card.name }}</h3>
+    <p>{{ card.team_count }} teams -> {{ card.size }} bracket</p>
+    <p>Updated: {{ card.updated_at }}</p>
+    <p>Champion: {{ card.champion or 'TBD' }}</p>
+    <p class="mini">Share code: {{ card.share_code }}</p>
+    <a class="button-like" href="{{ url_for('view_bracket', bracket_id=card.id) }}">Open Bracket</a>
+  </article>
+  {% endfor %}
+</section>
+{% else %}
+<section class="card">
+  <h2>No brackets yet</h2>
+  <p class="sub">Start by creating your first one.</p>
+  <a class="button-like" href="{{ url_for('new_bracket') }}">Create Bracket</a>
+</section>
+{% endif %}
+{% endblock %}

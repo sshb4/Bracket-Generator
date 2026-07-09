@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}New Bracket | Bracket Maker{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Create Bracket</h1>
+  <p class="sub">Paste one team per line, choose seeding, then select BYEs if needed.</p>
+
+  <form method="post" action="{{ url_for('create_bracket') }}" id="create-bracket-form">
+    <div class="split">
+      <div class="stack">
+        <label>Bracket Name</label>
+        <input type="text" name="name" placeholder="Summer Cup" />
+
+        <label>Teams (one per line)</label>
+        <textarea id="teams-input" name="teams" rows="12" placeholder="Team Alpha&#10;Team Bravo&#10;Team Charlie" required></textarea>
+      </div>
+
+      <div class="stack">
+        <label>Seeding</label>
+        <select name="seeding_mode" id="seeding-mode">
+          <option value="order">Use pasted order</option>
+          <option value="random">Randomize</option>
+        </select>
+
+        <button type="button" id="prepare-byes">Prepare BYEs</button>
+        <div id="bye-summary" class="muted"></div>
+        <div id="bye-selector" class="bye-list"></div>
+      </div>
+    </div>
+
+    <button type="submit">Generate Bracket</button>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ bracket['name'] }} | Bracket Maker{% endblock %}
+{% block content %}
+<section class="dashboard-head">
+  <div>
+    <h1>{{ bracket['name'] }}</h1>
+    <p class="sub">{{ teams|length }} teams -> {{ bracket['size'] }} bracket | Seeding: {{ bracket['seeding_mode'] }}</p>
+    <p class="mini">BYE teams: {% if bye_teams %}{{ bye_teams|join(', ') }}{% else %}None{% endif %}</p>
+  </div>
+  <div class="actions-row">
+    <button type="button" class="ghost" id="undo-pick" disabled>Undo Last Pick</button>
+    <button type="button" class="ghost" id="reset-bracket">Reset Bracket</button>
+    <button type="button" id="copy-share" data-bracket-id="{{ bracket['id'] }}">Copy Share Link</button>
+    <a class="button-like ghost" href="{{ url_for('dashboard') }}">Back</a>
+  </div>
+</section>
+
+<section id="action-feedback" class="action-feedback" data-state="info">Pick a winner to advance teams.</section>
+
+<section id="champion-banner" class="card champion {% if not rounds[-1][0]['winner'] %}hidden{% endif %}">
+  <h2>Champion: <span id="champion-name">{{ rounds[-1][0]['winner'] or '' }}</span></h2>
+</section>
+
+<section class="rounds-board" id="rounds-board" data-bracket-id="{{ bracket['id'] }}" data-rounds='{{ rounds|tojson|safe }}'>
+  {% for round in rounds %}
+    <article class="round-column" data-round-index="{{ loop.index0 }}">
+      <h3>Round {{ loop.index }}</h3>
+      {% for match in round %}
+        <div class="match" data-match-index="{{ loop.index0 }}">
+          <button class="team-btn{% if match['winner'] == match['team1'] %} winner{% endif %}" {% if not match['team1'] %}disabled{% endif %} data-team="{{ match['team1'] or '' }}">{{ match['team1'] or 'TBD' }}</button>
+          <button class="team-btn{% if match['winner'] == match['team2'] %} winner{% endif %}" {% if not match['team2'] or match['team2'] == 'BYE' %}disabled{% endif %} data-team="{{ match['team2'] or '' }}">{{ match['team2'] or 'TBD' }}</button>
+        </div>
+      {% endfor %}
+    </article>
+  {% endfor %}
+</section>
+
+<dialog id="reset-modal" class="confirm-modal">
+  <form method="dialog" class="modal-card">
+    <h3>Reset this bracket?</h3>
+    <p class="sub">This will clear all picks and keep only automatic BYE advances.</p>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="cancel-reset">Cancel</button>
+      <button type="button" id="confirm-reset">Yes, Reset</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
