@@ -25,3 +25,16 @@ Open http://127.0.0.1:5000
 
 - Data is stored in `app.db` (SQLite) in the project root.
 - Sharing currently creates a copy in the recipient's account.
+
+## Deploy and share (Render)
+
+1. Go to Render and connect your GitHub account.
+2. Create a new Blueprint service and pick this repo.
+3. Render will detect `render.yaml` and create the web app.
+4. Once deployed, open the Render URL and share it with your friend.
+
+### Important DB note
+
+- This app currently uses SQLite (`app.db`).
+- On free cloud instances, local disk may reset after restarts/redeploys.
+- For durable hosted data, move to managed Postgres (I can wire this next).
