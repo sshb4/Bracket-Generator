@@ -31,10 +31,11 @@ Open http://127.0.0.1:5000
 1. Go to Render and connect your GitHub account.
 2. Create a new Blueprint service and pick this repo.
 3. Render will detect `render.yaml` and create the web app.
-4. Once deployed, open the Render URL and share it with your friend.
+4. In Neon (free tier), create a Postgres project and copy the connection string.
+5. In Render service settings, add env var `DATABASE_URL` with your Neon connection string.
+6. Redeploy, then open the Render URL and share it with your friend.
 
-### Important DB note
+### Database behavior
 
-- This app currently uses SQLite (`app.db`).
-- On free cloud instances, local disk may reset after restarts/redeploys.
-- For durable hosted data, move to managed Postgres (I can wire this next).
+- Local development uses SQLite (`app.db`) when `DATABASE_URL` is not set.
+- Hosted deployment should use Postgres via `DATABASE_URL` for durable data.

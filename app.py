@@ -1,4 +1,5 @@
 import json
+import importlib
 import os
 import random
 import sqlite3
@@ -9,18 +10,65 @@ from functools import wraps
 from flask import Flask, flash, g, jsonify, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
+psycopg = None
+dict_row = None
+try:
+    psycopg = importlib.import_module("psycopg")
+    psycopg_rows = importlib.import_module("psycopg.rows")
+    dict_row = psycopg_rows.dict_row
+except ImportError:
+    pass
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE = os.path.join(BASE_DIR, "app.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = DATABASE_URL.startswith("postgres://") or DATABASE_URL.startswith("postgresql://")
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 PASSWORD_HASH_METHOD = "pbkdf2:sha256"
 
+if USE_POSTGRES and psycopg is None:
+    raise RuntimeError("DATABASE_URL is set for Postgres but psycopg is not installed.")
+
+
+INTEGRITY_ERRORS = (sqlite3.IntegrityError,)
+if psycopg is not None:
+    INTEGRITY_ERRORS = INTEGRITY_ERRORS + (psycopg.IntegrityError,)
+
+
+_db_initialized = False
+
+
+def _adapt_query(query):
+    if USE_POSTGRES:
+        return query.replace("?", "%s")
+    return query
+
+
+def db_execute(db, query, params=()):
+    return db.execute(_adapt_query(query), params)
+
+
+def db_executemany(db, query, seq_of_params):
+    return db.executemany(_adapt_query(query), seq_of_params)
+
+
+def db_last_insert_id(db, table_name):
+    if USE_POSTGRES:
+        row = db_execute(db, f"SELECT currval(pg_get_serial_sequence('{table_name}', 'id')) AS id").fetchone()
+        return row["id"]
+    row = db_execute(db, "SELECT last_insert_rowid() AS id").fetchone()
+    return row["id"]
+
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE)
-        g.db.row_factory = sqlite3.Row
+        if USE_POSTGRES:
+            g.db = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        else:
+            g.db = sqlite3.connect(DATABASE)
+            g.db.row_factory = sqlite3.Row
     return g.db
 
 
@@ -33,31 +81,63 @@ def close_db(_error):
 
 def init_db():
     db = get_db()
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL
-        );
+    if USE_POSTGRES:
+        db_execute(
+            db,
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """,
+        )
+        db_execute(
+            db,
+            """
+            CREATE TABLE IF NOT EXISTS brackets (
+                id SERIAL PRIMARY KEY,
+                owner_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                teams_json TEXT NOT NULL,
+                seeding_mode TEXT NOT NULL,
+                bye_teams_json TEXT NOT NULL,
+                rounds_json TEXT NOT NULL,
+                share_code TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(owner_id) REFERENCES users(id)
+            );
+            """,
+        )
+    else:
+        db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
 
-        CREATE TABLE IF NOT EXISTS brackets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            owner_id INTEGER NOT NULL,
-            name TEXT NOT NULL,
-            size INTEGER NOT NULL,
-            teams_json TEXT NOT NULL,
-            seeding_mode TEXT NOT NULL,
-            bye_teams_json TEXT NOT NULL,
-            rounds_json TEXT NOT NULL,
-            share_code TEXT UNIQUE NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            FOREIGN KEY(owner_id) REFERENCES users(id)
-        );
-        """
-    )
+            CREATE TABLE IF NOT EXISTS brackets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                size INTEGER NOT NULL,
+                teams_json TEXT NOT NULL,
+                seeding_mode TEXT NOT NULL,
+                bye_teams_json TEXT NOT NULL,
+                rounds_json TEXT NOT NULL,
+                share_code TEXT UNIQUE NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                FOREIGN KEY(owner_id) REFERENCES users(id)
+            );
+            """
+        )
     db.commit()
 
 
@@ -76,7 +156,7 @@ def current_user():
     if user_id is None:
         return None
     db = get_db()
-    return db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    return db_execute(db, "SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
 def next_power_of_two(n):
@@ -200,7 +280,10 @@ def serialize_datetime_now():
 
 @app.before_request
 def ensure_db_initialized():
-    init_db()
+    global _db_initialized
+    if not _db_initialized:
+        init_db()
+        _db_initialized = True
 
 
 @app.route("/")
@@ -222,7 +305,8 @@ def register():
 
         db = get_db()
         try:
-            db.execute(
+            db_execute(
+                db,
                 "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
                 (
                     username,
@@ -231,7 +315,7 @@ def register():
                 ),
             )
             db.commit()
-        except sqlite3.IntegrityError:
+        except INTEGRITY_ERRORS:
             flash("That username is already taken.")
             return render_template("register.html")
 
@@ -248,7 +332,7 @@ def login():
         password = request.form.get("password", "")
 
         db = get_db()
-        user = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        user = db_execute(db, "SELECT * FROM users WHERE username = ?", (username,)).fetchone()
 
         if user is None or not check_password_hash(user["password_hash"], password):
             flash("Invalid username or password.")
@@ -271,7 +355,8 @@ def logout():
 @login_required
 def dashboard():
     db = get_db()
-    rows = db.execute(
+    rows = db_execute(
+        db,
         """
         SELECT b.*, u.username AS owner_name
         FROM brackets b
@@ -343,7 +428,8 @@ def create_bracket():
     now = serialize_datetime_now()
     share_code = uuid.uuid4().hex[:10]
 
-    db.execute(
+    db_execute(
+        db,
         """
         INSERT INTO brackets (
             owner_id, name, size, teams_json, seeding_mode, bye_teams_json,
@@ -365,13 +451,14 @@ def create_bracket():
     )
     db.commit()
 
-    bracket_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    bracket_id = db_last_insert_id(db, "brackets")
     return redirect(url_for("view_bracket", bracket_id=bracket_id))
 
 
 def get_bracket_or_404(bracket_id):
     db = get_db()
-    row = db.execute(
+    row = db_execute(
+        db,
         "SELECT b.*, u.username AS owner_name FROM brackets b JOIN users u ON b.owner_id = u.id WHERE b.id = ?",
         (bracket_id,),
     ).fetchone()
@@ -438,7 +525,8 @@ def set_winner(bracket_id):
     recompute_downstream(rounds, round_index)
 
     db = get_db()
-    db.execute(
+    db_execute(
+        db,
         "UPDATE brackets SET rounds_json = ?, updated_at = ? WHERE id = ?",
         (json.dumps(rounds), serialize_datetime_now(), bracket_id),
     )
@@ -492,7 +580,8 @@ def reset_bracket(bracket_id):
     recompute_downstream(rounds, 0)
 
     db = get_db()
-    db.execute(
+    db_execute(
+        db,
         "UPDATE brackets SET rounds_json = ?, updated_at = ? WHERE id = ?",
         (json.dumps(rounds), serialize_datetime_now(), bracket_id),
     )
@@ -505,7 +594,7 @@ def reset_bracket(bracket_id):
 @login_required
 def add_shared_bracket(share_code):
     db = get_db()
-    original = db.execute("SELECT * FROM brackets WHERE share_code = ?", (share_code,)).fetchone()
+    original = db_execute(db, "SELECT * FROM brackets WHERE share_code = ?", (share_code,)).fetchone()
     if original is None:
         flash("Invalid share link.")
         return redirect(url_for("dashboard"))
@@ -517,7 +606,8 @@ def add_shared_bracket(share_code):
     existing_name = f"Copy of {original['name']}"
     now = serialize_datetime_now()
 
-    db.execute(
+    db_execute(
+        db,
         """
         INSERT INTO brackets (
             owner_id, name, size, teams_json, seeding_mode, bye_teams_json,
@@ -539,7 +629,7 @@ def add_shared_bracket(share_code):
     )
     db.commit()
 
-    new_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    new_id = db_last_insert_id(db, "brackets")
     flash("Bracket added to your account.")
     return redirect(url_for("view_bracket", bracket_id=new_id))
 
