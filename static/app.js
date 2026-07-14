@@ -18,7 +18,52 @@ function setupByePreparation() {
   const teamsInput = document.getElementById("teams-input");
   const prepareBtn = document.getElementById("prepare-byes");
   const summary = document.getElementById("bye-summary");
+  const gateMessage = document.getElementById("bye-gate-message");
   const list = document.getElementById("bye-selector");
+  const generateBtn = document.getElementById("generate-bracket");
+
+  function getRequiredByes(teams) {
+    if (teams.length < 2) return 0;
+    const size = nextPowerOfTwo(teams.length);
+    return size - teams.length;
+  }
+
+  function setGate(canGenerate, message, state = "warning") {
+    if (generateBtn) generateBtn.disabled = !canGenerate;
+    if (!gateMessage) return;
+    gateMessage.textContent = message;
+    gateMessage.dataset.state = state;
+  }
+
+  function evaluateGate() {
+    const teams = parseTeamsFromTextarea(teamsInput.value);
+    const requiredByes = getRequiredByes(teams);
+    const preparedFor = list.dataset.preparedFor || "";
+    const currentKey = teams.join("|");
+    const checked = list.querySelectorAll("input[type='checkbox']:checked").length;
+
+    if (teams.length < 2) {
+      setGate(true, "Add at least two teams to generate a bracket.", "warning");
+      return;
+    }
+
+    if (requiredByes === 0) {
+      setGate(true, "No BYEs needed for this team count.", "ok");
+      return;
+    }
+
+    if (preparedFor !== currentKey) {
+      setGate(false, `This bracket needs ${requiredByes} BYE(s). Click Prepare BYEs first.`, "warning");
+      return;
+    }
+
+    if (checked !== requiredByes) {
+      setGate(false, `Select exactly ${requiredByes} BYE team(s) before generating.`, "warning");
+      return;
+    }
+
+    setGate(true, "BYE selections complete. You can generate the bracket.", "ok");
+  }
 
   function updateSummaryAndLimit(requiredByes) {
     const checked = list.querySelectorAll("input[type='checkbox']:checked").length;
@@ -31,6 +76,8 @@ function setupByePreparation() {
     checkboxes.forEach((cb) => {
       if (!cb.checked) cb.disabled = checked >= requiredByes && requiredByes > 0;
     });
+
+    evaluateGate();
   }
 
   prepareBtn.addEventListener("click", () => {
@@ -44,6 +91,7 @@ function setupByePreparation() {
 
     const size = nextPowerOfTwo(teams.length);
     const requiredByes = size - teams.length;
+    list.dataset.preparedFor = teams.join("|");
 
     list.innerHTML = "";
     teams.forEach((team) => {
@@ -55,64 +103,49 @@ function setupByePreparation() {
     });
 
     updateSummaryAndLimit(requiredByes);
-
-    list.addEventListener(
-      "change",
-      () => {
-        updateSummaryAndLimit(requiredByes);
-      },
-      { once: true }
-    );
-
     list.onchange = () => updateSummaryAndLimit(requiredByes);
   });
-}
 
-function renderRounds(roundsBoard, rounds) {
-  roundsBoard.innerHTML = "";
-
-  rounds.forEach((round, roundIndex) => {
-    const col = document.createElement("article");
-    col.className = "round-column";
-    col.dataset.roundIndex = String(roundIndex);
-
-    const h = document.createElement("h3");
-    h.className = "round-title";
-    h.textContent = `Round ${roundIndex + 1}`;
-    col.appendChild(h);
-
-    const matchesWrap = document.createElement("div");
-    matchesWrap.className = "round-matches";
-
-    round.forEach((match, matchIndex) => {
-      const m = document.createElement("div");
-      m.className = "match";
-      m.dataset.matchIndex = String(matchIndex);
-
-      const top = document.createElement("button");
-      top.className = `team-btn ${match.winner === match.team1 ? "winner" : ""}`.trim();
-      top.textContent = match.team1 || "TBD";
-      top.dataset.team = match.team1 || "";
-      if (!match.team1) top.disabled = true;
-
-      const bottom = document.createElement("button");
-      bottom.className = `team-btn ${match.winner === match.team2 ? "winner" : ""}`.trim();
-      bottom.textContent = match.team2 || "TBD";
-      bottom.dataset.team = match.team2 || "";
-      if (!match.team2 || match.team2 === "BYE") bottom.disabled = true;
-
-      m.appendChild(top);
-      m.appendChild(bottom);
-      matchesWrap.appendChild(m);
-    });
-
-    col.appendChild(matchesWrap);
-
-    roundsBoard.appendChild(col);
+  teamsInput.addEventListener("input", () => {
+    evaluateGate();
   });
 
-  layoutRounds(roundsBoard);
-  drawConnectors(roundsBoard);
+  form.addEventListener("submit", (event) => {
+    evaluateGate();
+    if (generateBtn && generateBtn.disabled) {
+      event.preventDefault();
+      setFeedback("Select required BYEs before generating the bracket.", "error");
+    }
+  });
+
+  evaluateGate();
+}
+
+function setFeedback(message, state = "info") {
+  const actionFeedback = document.getElementById("action-feedback");
+  if (!actionFeedback) return;
+  actionFeedback.innerHTML = "";
+  actionFeedback.textContent = message;
+  actionFeedback.dataset.state = state;
+}
+
+function setFeedbackWithUndo(message, onUndo) {
+  const actionFeedback = document.getElementById("action-feedback");
+  if (!actionFeedback) return;
+
+  actionFeedback.innerHTML = "";
+  const text = document.createElement("span");
+  text.textContent = message;
+  actionFeedback.appendChild(text);
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "feedback-inline-btn";
+  btn.textContent = "Undo";
+  btn.addEventListener("click", onUndo);
+  actionFeedback.appendChild(btn);
+
+  actionFeedback.dataset.state = "success";
 }
 
 function layoutRounds(roundsBoard) {
@@ -122,10 +155,10 @@ function layoutRounds(roundsBoard) {
   const firstRoundMatches = cols[0].querySelectorAll(".match");
   if (firstRoundMatches.length === 0) return;
 
-  const matchHeight = firstRoundMatches[0].offsetHeight || 78;
-  const baseGap = 10;
-  const titleAllowance = 36;
-  const minBoardHeight = 380;
+  const matchHeight = firstRoundMatches[0].offsetHeight || 96;
+  const baseGap = 16;
+  const titleAllowance = 44;
+  const minBoardHeight = 420;
 
   const firstRoundHeight =
     firstRoundMatches.length * matchHeight +
@@ -143,13 +176,117 @@ function layoutRounds(roundsBoard) {
     const count = matches.length;
     if (count <= 1) {
       matchesWrap.style.rowGap = "0px";
+      matchesWrap.style.paddingTop = "0px";
       return;
     }
 
     const available = Math.max(0, boardHeight - titleAllowance - count * matchHeight);
     const gap = Math.max(baseGap, available / (count - 1));
     matchesWrap.style.rowGap = `${gap}px`;
+    matchesWrap.style.paddingTop = "0px";
   });
+}
+
+function setupBoardScrollEnhancements(roundsBoard) {
+  if (!roundsBoard || roundsBoard.dataset.scrollEnhanced === "1") return;
+  roundsBoard.dataset.scrollEnhanced = "1";
+
+  // Let mouse-wheel users scroll wide brackets horizontally without holding Shift.
+  roundsBoard.addEventListener(
+    "wheel",
+    (event) => {
+      if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+      if (roundsBoard.scrollWidth <= roundsBoard.clientWidth) return;
+
+      event.preventDefault();
+      roundsBoard.scrollLeft += event.deltaY;
+    },
+    { passive: false }
+  );
+}
+
+function setupBoardDragPan(roundsBoard) {
+  if (!roundsBoard || roundsBoard.dataset.dragPan === "1") return;
+  roundsBoard.dataset.dragPan = "1";
+
+  let isDown = false;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let moved = false;
+
+  roundsBoard.addEventListener("mousedown", (event) => {
+    const target = event.target;
+    if (target.closest("button, a, input, select, textarea, label")) return;
+
+    isDown = true;
+    moved = false;
+    startX = event.pageX;
+    startScrollLeft = roundsBoard.scrollLeft;
+    roundsBoard.classList.add("dragging");
+  });
+
+  window.addEventListener("mouseup", () => {
+    isDown = false;
+    roundsBoard.classList.remove("dragging");
+  });
+
+  roundsBoard.addEventListener("mouseleave", () => {
+    isDown = false;
+    roundsBoard.classList.remove("dragging");
+  });
+
+  roundsBoard.addEventListener("mousemove", (event) => {
+    if (!isDown) return;
+    const walk = event.pageX - startX;
+    if (Math.abs(walk) > 2) moved = true;
+    roundsBoard.scrollLeft = startScrollLeft - walk;
+  });
+
+  roundsBoard.addEventListener(
+    "click",
+    (event) => {
+      if (!moved) return;
+      event.preventDefault();
+      event.stopPropagation();
+      moved = false;
+    },
+    true
+  );
+}
+
+function setupBoardZoomControls(roundsBoard, onAfterZoom) {
+  if (!roundsBoard || roundsBoard.dataset.zoomReady === "1") return;
+  roundsBoard.dataset.zoomReady = "1";
+
+  const zoomInBtn = document.getElementById("zoom-in");
+  const zoomOutBtn = document.getElementById("zoom-out");
+  if (!zoomInBtn || !zoomOutBtn) return;
+
+  const minZoom = 0.75;
+  const maxZoom = 1.35;
+  const step = 0.05;
+  let zoomLevel = 1;
+
+  function applyZoom(nextZoom) {
+    zoomLevel = Math.max(minZoom, Math.min(maxZoom, nextZoom));
+    roundsBoard.style.setProperty("--board-zoom", String(zoomLevel));
+    if (typeof onAfterZoom === "function") {
+      onAfterZoom();
+    }
+  }
+
+  zoomInBtn.addEventListener("click", () => applyZoom(zoomLevel + step));
+  zoomOutBtn.addEventListener("click", () => applyZoom(zoomLevel - step));
+
+  roundsBoard.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    if (event.deltaY < 0) {
+      applyZoom(zoomLevel + step);
+    } else if (event.deltaY > 0) {
+      applyZoom(zoomLevel - step);
+    }
+  }, { passive: false });
 }
 
 function drawConnectors(roundsBoard) {
@@ -197,128 +334,182 @@ function drawConnectors(roundsBoard) {
   roundsBoard.prepend(svg);
 }
 
+function renderRounds(roundsBoard, rounds, standings) {
+  roundsBoard.innerHTML = "";
+
+  rounds.forEach((round, roundIndex) => {
+    const col = document.createElement("article");
+    col.className = "round-column";
+    col.dataset.roundIndex = String(roundIndex);
+
+    const h = document.createElement("h3");
+    h.className = "round-title";
+    h.textContent = `Round ${roundIndex + 1}`;
+    col.appendChild(h);
+
+    const matchesWrap = document.createElement("div");
+    matchesWrap.className = "round-matches";
+
+    round.forEach((match, matchIndex) => {
+      const key = `${roundIndex}:${matchIndex}`;
+      const standing = standings[key] || {};
+      const m = document.createElement("div");
+      m.className = "match";
+      m.dataset.matchIndex = String(matchIndex);
+
+      const top = document.createElement("button");
+      top.className = [
+        "team-btn",
+        "vote-btn",
+        match.winner === match.team1 ? "winner" : "",
+        standing.my_vote === match.team1 ? "my-vote" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      top.textContent = match.team1 || "TBD";
+      top.dataset.team = match.team1 || "";
+      if (!match.team1 || match.team1 === "BYE") top.disabled = true;
+
+      const bottom = document.createElement("button");
+      bottom.className = [
+        "team-btn",
+        "vote-btn",
+        match.winner === match.team2 ? "winner" : "",
+        standing.my_vote === match.team2 ? "my-vote" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      bottom.textContent = match.team2 || "TBD";
+      bottom.dataset.team = match.team2 || "";
+      if (!match.team2 || match.team2 === "BYE") bottom.disabled = true;
+
+      const standingEl = document.createElement("p");
+      standingEl.className = "standing";
+      standingEl.dataset.standingKey = key;
+      standingEl.textContent = `${standing.team1_votes || 0} - ${standing.team2_votes || 0}`;
+
+      m.appendChild(top);
+      m.appendChild(bottom);
+      m.appendChild(standingEl);
+      matchesWrap.appendChild(m);
+    });
+
+    col.appendChild(matchesWrap);
+    roundsBoard.appendChild(col);
+  });
+
+  layoutRounds(roundsBoard);
+  drawConnectors(roundsBoard);
+}
+
+function syncChampion(champion) {
+  const championBanner = document.getElementById("champion-banner");
+  const championName = document.getElementById("champion-name");
+  if (!championBanner || !championName) return;
+
+  if (champion) {
+    championBanner.classList.remove("hidden");
+    championName.textContent = champion;
+  } else {
+    championBanner.classList.add("hidden");
+    championName.textContent = "";
+  }
+}
+
 function setupBracketInteractions() {
   const board = document.getElementById("rounds-board");
   if (!board) return;
 
   const bracketId = board.dataset.bracketId;
   let rounds = JSON.parse(board.dataset.rounds || "[]");
-  const undoBtn = document.getElementById("undo-pick");
+  let standings = JSON.parse(board.dataset.standings || "{}");
+  let lastVoteAction = null;
+
   const resetBtn = document.getElementById("reset-bracket");
   const resetModal = document.getElementById("reset-modal");
   const cancelResetBtn = document.getElementById("cancel-reset");
   const confirmResetBtn = document.getElementById("confirm-reset");
-  const actionFeedback = document.getElementById("action-feedback");
-  const history = [];
 
-  function setFeedback(message, state = "info") {
-    if (!actionFeedback) return;
-    actionFeedback.textContent = message;
-    actionFeedback.dataset.state = state;
-  }
-
-  function syncUndoState() {
-    if (!undoBtn) return;
-    undoBtn.disabled = history.length === 0;
-  }
-
-  async function saveWinner(roundIndex, matchIndex, winner, isUndo = false) {
-    const res = await fetch(`/api/brackets/${bracketId}/winner`, {
+  async function castVote(roundIndex, matchIndex, team) {
+    const res = await fetch(`/api/brackets/${bracketId}/vote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ round_index: roundIndex, match_index: matchIndex, winner }),
+      body: JSON.stringify({ round_index: roundIndex, match_index: matchIndex, team }),
     });
 
     const data = await res.json();
     if (!res.ok) {
-      setFeedback(data.error || "Could not update winner.", "error");
-      return false;
+      setFeedback(data.error || "Could not submit vote.", "error");
+      return;
     }
 
     rounds = data.rounds;
-    renderRounds(board, rounds);
+    standings = data.standings || {};
+    renderRounds(board, rounds, standings);
+    syncChampion(data.champion);
+    setFeedback(`Vote submitted for ${team}.`, "success");
+  }
 
-    const championBanner = document.getElementById("champion-banner");
-    const championName = document.getElementById("champion-name");
-    if (data.champion) {
-      championBanner.classList.remove("hidden");
-      championName.textContent = data.champion;
-    } else {
-      championBanner.classList.add("hidden");
-      championName.textContent = "";
+  async function undoLastVote() {
+    if (!lastVoteAction) return;
+    const { roundIndex, matchIndex, previousVote } = lastVoteAction;
+    const undoTeam = previousVote || null;
+
+    const res = await fetch(`/api/brackets/${bracketId}/vote`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ round_index: roundIndex, match_index: matchIndex, team: undoTeam }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      setFeedback(data.error || "Could not undo vote.", "error");
+      return;
     }
 
-    if (isUndo) {
-      setFeedback("Undid last pick.", "success");
-    } else {
-      setFeedback(`Saved winner: ${winner}.`, "success");
-    }
-
-    return true;
+    rounds = data.rounds;
+    standings = data.standings || {};
+    renderRounds(board, rounds, standings);
+    syncChampion(data.champion);
+    lastVoteAction = null;
+    setFeedback("Last vote undone.", "success");
   }
 
   board.addEventListener("click", async (event) => {
-    const btn = event.target.closest(".team-btn");
+    const btn = event.target.closest(".vote-btn");
     if (!btn || btn.disabled) return;
 
     const match = btn.closest(".match");
     const col = btn.closest(".round-column");
-    const winner = btn.dataset.team;
-    if (!winner || winner === "BYE") return;
+    const team = btn.dataset.team;
+    if (!team || team === "BYE") return;
 
     const roundIndex = Number(col.dataset.roundIndex);
     const matchIndex = Number(match.dataset.matchIndex);
-    const previousWinner = rounds?.[roundIndex]?.[matchIndex]?.winner || null;
-
-    if (previousWinner === winner) {
-      setFeedback("That winner is already selected for this match.", "info");
-      return;
-    }
-
-    const ok = await saveWinner(roundIndex, matchIndex, winner, false);
-    if (!ok) return;
-
-    history.push({ roundIndex, matchIndex, previousWinner, nextWinner: winner });
-    syncUndoState();
+    const key = `${roundIndex}:${matchIndex}`;
+    const previousVote = standings[key]?.my_vote || null;
+    await castVote(roundIndex, matchIndex, team);
+    lastVoteAction = { roundIndex, matchIndex, previousVote };
+    setFeedbackWithUndo(`Vote submitted for ${team}.`, undoLastVote);
   });
 
-  if (undoBtn) {
-    undoBtn.addEventListener("click", async () => {
-      const last = history.pop();
-      syncUndoState();
-      if (!last) return;
-
-      const ok = await saveWinner(last.roundIndex, last.matchIndex, last.previousWinner, true);
-      if (!ok) {
-        history.push(last);
-        syncUndoState();
-      }
-    });
-  }
-
-  async function resetBracket() {
+  async function resetBracketVotes() {
     const res = await fetch(`/api/brackets/${bracketId}/reset`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
-    const data = await res.json();
 
+    const data = await res.json();
     if (!res.ok) {
       setFeedback(data.error || "Could not reset bracket.", "error");
       return;
     }
 
     rounds = data.rounds;
-    renderRounds(board, rounds);
-    history.length = 0;
-    syncUndoState();
-
-    const championBanner = document.getElementById("champion-banner");
-    const championName = document.getElementById("champion-name");
-    championBanner.classList.add("hidden");
-    championName.textContent = "";
-
-    setFeedback("Bracket reset. All manual picks were cleared.", "success");
+    standings = data.standings || {};
+    renderRounds(board, rounds, standings);
+    syncChampion(data.champion);
+    setFeedback("All votes cleared.", "success");
   }
 
   if (resetBtn && resetModal && cancelResetBtn && confirmResetBtn) {
@@ -332,11 +523,17 @@ function setupBracketInteractions() {
 
     confirmResetBtn.addEventListener("click", async () => {
       resetModal.close();
-      await resetBracket();
+      await resetBracketVotes();
     });
   }
 
-  renderRounds(board, rounds);
+  renderRounds(board, rounds, standings);
+  setupBoardScrollEnhancements(board);
+  setupBoardDragPan(board);
+  setupBoardZoomControls(board, () => {
+    layoutRounds(board);
+    drawConnectors(board);
+  });
   window.addEventListener("resize", () => {
     layoutRounds(board);
     drawConnectors(board);
@@ -344,29 +541,75 @@ function setupBracketInteractions() {
 }
 
 function setupShareButton() {
-  const btn = document.getElementById("copy-share");
-  if (!btn) return;
+  const buttons = Array.from(document.querySelectorAll("#copy-share, .copy-share-btn"));
+  if (buttons.length === 0) return;
 
-  btn.addEventListener("click", async () => {
-    const bracketId = btn.dataset.bracketId;
-    const res = await fetch(`/api/brackets/${bracketId}/share`, { method: "POST" });
-    const data = await res.json();
+  buttons.forEach((btn) => {
+    if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent;
+  });
 
-    if (!res.ok) {
-      alert(data.error || "Unable to create share link.");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const bracketId = btn.dataset.bracketId;
+      const modeSelect = document.getElementById("share-mode");
+      const mode = modeSelect ? modeSelect.value : "filled";
+
+      const res = await fetch(`/api/brackets/${bracketId}/share`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setFeedback(data.error || "Unable to create share link.", "error");
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(data.share_url);
+        btn.textContent = "Link Copied";
+        setFeedback("Share link copied.", "success");
+        window.setTimeout(() => {
+          btn.textContent = btn.dataset.defaultLabel || "Copy Share Link";
+        }, 1600);
+      } catch (_err) {
+        prompt("Copy this share URL:", data.share_url);
+      }
+    });
+  });
+}
+
+function setupInviteButton() {
+  const inviteBtn = document.getElementById("send-invite");
+  const inviteEmail = document.getElementById("invite-email");
+  if (!inviteBtn || !inviteEmail) return;
+
+  inviteBtn.addEventListener("click", async () => {
+    const email = inviteEmail.value.trim();
+    if (!email) {
+      setFeedback("Enter an email to invite.", "error");
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(data.share_url);
-      btn.textContent = "Share Link Copied";
-      const feedback = document.getElementById("action-feedback");
-      if (feedback) {
-        feedback.textContent = "Share link copied to clipboard.";
-        feedback.dataset.state = "success";
-      }
-    } catch (_err) {
-      prompt("Copy this share URL:", data.share_url);
+    const bracketId = inviteBtn.dataset.bracketId;
+    const res = await fetch(`/api/brackets/${bracketId}/invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      setFeedback(data.error || "Could not send invite.", "error");
+      return;
+    }
+
+    inviteEmail.value = "";
+    if (data.email_sent) {
+      setFeedback("Invite sent via email.", "success");
+    } else {
+      setFeedback("Invite created. Email API not configured, link logged in server output.", "info");
     }
   });
 }
@@ -374,3 +617,4 @@ function setupShareButton() {
 setupByePreparation();
 setupBracketInteractions();
 setupShareButton();
+setupInviteButton();

@@ -145,6 +145,12 @@ button,
   width: fit-content;
 }
 
+button:disabled,
+.button-like:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 button.ghost,
 .button-like.ghost {
   background: #f0ece3;
@@ -188,8 +194,32 @@ button.ghost:disabled,
   gap: 0.8rem;
 }
 
+.join-card,
+.invite-card {
+  margin-bottom: 1rem;
+}
+
+.join-form,
+.invite-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 240px) auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+
 .bracket-card h3 {
   margin-bottom: 0.25rem;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+
+.danger {
+  background: linear-gradient(135deg, #c9382b, #a92f23);
 }
 
 .bye-list {
@@ -203,6 +233,18 @@ button.ghost:disabled,
   overflow: auto;
 }
 
+.gate-note {
+  min-height: 1.2rem;
+}
+
+.gate-note[data-state="warning"] {
+  color: #9a4b07;
+}
+
+.gate-note[data-state="ok"] {
+  color: #2c7a45;
+}
+
 .bye-item {
   display: flex;
   gap: 0.5rem;
@@ -210,25 +252,43 @@ button.ghost:disabled,
 }
 
 .rounds-board {
+  --board-zoom: 1;
+  --board-content-inset: clamp(1.15rem, 2.2vw, 1.9rem);
   position: relative;
   display: flex;
-  gap: 0.6rem;
+  gap: 1.1rem;
   overflow: auto;
-  padding: 0.5rem 0.6rem 1rem;
+  overflow-y: hidden;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: var(--board-content-inset) var(--board-content-inset) 1.4rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.55);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.78), rgba(245, 241, 232, 0.74));
   min-height: var(--board-height, 420px);
   align-items: flex-start;
+  scroll-behavior: smooth;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  cursor: grab;
+  zoom: var(--board-zoom);
+}
+
+.rounds-board.dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .round-column {
-  min-width: 180px;
+  min-width: clamp(210px, 22vw, 250px);
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  scroll-snap-align: start;
 }
 
 .round-title {
@@ -240,29 +300,30 @@ button.ghost:disabled,
   min-height: calc(var(--board-height, 420px) - 36px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   row-gap: 0.6rem;
 }
 
 .match {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.45rem;
+  background: linear-gradient(160deg, #fff, #f8f7f3);
+  border: 1px solid #d5cfbf;
+  border-radius: 14px;
+  padding: 0.55rem;
   display: grid;
-  gap: 0.28rem;
-  min-height: 78px;
+  gap: 0.38rem;
+  min-height: 96px;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.04);
 }
 
 .team-btn {
   text-align: left;
   width: 100%;
-  border-radius: 9px;
-  padding: 0.42rem 0.52rem;
-  border: 1px solid #eee;
-  background: #fafafa;
+  border-radius: 10px;
+  padding: 0.5rem 0.58rem;
+  border: 1px solid #e6e0d3;
+  background: #fcfbf8;
   color: var(--ink);
-  font-size: 0.92rem;
+  font-size: 0.93rem;
 }
 
 .connector-layer {
@@ -282,18 +343,47 @@ button.ghost:disabled,
 }
 
 .team-btn.winner {
-  background: linear-gradient(135deg, #ddf3f4, #b8ecef);
-  border-color: #85d5d9;
+  background: linear-gradient(135deg, #d6f5df, #b8ecce);
+  border-color: #7aca96;
+}
+
+.team-btn.my-vote {
+  outline: 2px solid #ffb773;
+  outline-offset: 1px;
 }
 
 .team-btn:disabled {
-  opacity: 0.55;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.standing {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
 }
 
 .actions-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.55rem;
+}
+
+.zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.zoom-controls button {
+  min-width: 42px;
+}
+
+.board-zoom-controls {
+  position: absolute;
+  right: var(--board-content-inset);
+  top: var(--board-content-inset);
+  z-index: 4;
 }
 
 .action-feedback {
@@ -313,6 +403,16 @@ button.ghost:disabled,
 .action-feedback[data-state="error"] {
   border-color: #e7a8a8;
   background: #fff1f1;
+}
+
+.feedback-inline-btn {
+  margin-left: 0.5rem;
+  padding: 0.18rem 0.52rem;
+  border-radius: 999px;
+  border: 1px solid #d8d2c5;
+  background: #f8f5ee;
+  color: var(--ink);
+  cursor: pointer;
 }
 
 .champion {
@@ -372,6 +472,11 @@ button.ghost:disabled,
 
 @media (max-width: 900px) {
   .split {
+    grid-template-columns: 1fr;
+  }
+
+  .join-form,
+  .invite-row {
     grid-template-columns: 1fr;
   }
 

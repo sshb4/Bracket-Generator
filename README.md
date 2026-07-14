@@ -1,14 +1,19 @@
-# Bracket Maker
+# Bates Brackets
 
-A super simple web app to:
+A web app to:
 - register/login
+- auto-login immediately after signup
+- recover account password via email link
 - create brackets by pasting one team per line
 - auto-size bracket to next power of two
 - pick BYE teams when needed
 - seed in pasted order or random
-- click winners to advance rounds
+- invite collaborators by email
+- vote match winners (winner of each match is based on current vote totals)
+- see live vote standings on each matchup
 - save brackets per user account
-- share a bracket via link so another user can add a copy to their account
+- share via code or link
+- share a filled bracket copy or an empty bracket copy
 
 ## Run locally
 
@@ -21,21 +26,20 @@ python app.py
 
 Open http://127.0.0.1:5000
 
+## Email setup (free API)
+
+This project is wired for Resend as an email provider.
+
+Optional environment variables:
+
+```bash
+export RESEND_API_KEY="your_resend_key"
+export FROM_EMAIL="Bates Brackets <onboarding@your-domain.com>"
+```
+
+If `RESEND_API_KEY` is not set, invites and recovery links are still generated, but email delivery is skipped and links are logged to server output.
+
 ## Notes
 
 - Data is stored in `app.db` (SQLite) in the project root.
-- Sharing currently creates a copy in the recipient's account.
-
-## Deploy and share (Render)
-
-1. Go to Render and connect your GitHub account.
-2. Create a new Blueprint service and pick this repo.
-3. Render will detect `render.yaml` and create the web app.
-4. In Neon (free tier), create a Postgres project and copy the connection string.
-5. In Render service settings, add env var `DATABASE_URL` with your Neon connection string.
-6. Redeploy, then open the Render URL and share it with your friend.
-
-### Database behavior
-
-- Local development uses SQLite (`app.db`) when `DATABASE_URL` is not set.
-- Hosted deployment should use Postgres via `DATABASE_URL` for durable data.
+- Existing databases are migrated automatically on app start.

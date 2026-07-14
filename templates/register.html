@@ -1,13 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}Register | Bracket Maker{% endblock %}
+{% block title %}Register | Bates Brackets{% endblock %}
 {% block content %}
 <section class="card auth-card">
   <h1>Create Account</h1>
-  <p class="sub">Simple username + password setup.</p>
+  <p class="sub">Create your account and get signed in instantly.</p>
 
   <form method="post" class="stack">
     <label>Username</label>
     <input type="text" name="username" required />
+
+    <label>Email</label>
+    <input type="email" name="email" required />
 
     <label>Password</label>
     <input type="password" name="password" required />

@@ -1,47 +1,84 @@
 {% extends 'base.html' %}
-{% block title %}{{ bracket['name'] }} | Bracket Maker{% endblock %}
+{% block title %}{{ bracket['name'] }} | Bates Brackets{% endblock %}
 {% block content %}
 <section class="dashboard-head">
   <div>
     <h1>{{ bracket['name'] }}</h1>
     <p class="sub">{{ teams|length }} teams -> {{ bracket['size'] }} bracket | Seeding: {{ bracket['seeding_mode'] }}</p>
+    <p class="mini">Owner: {{ bracket['owner_name'] }} | Collaborators: {{ collaborator_count }}</p>
+    <p class="mini">Share code: {{ bracket['share_code'] }}</p>
     <p class="mini">BYE teams: {% if bye_teams %}{{ bye_teams|join(', ') }}{% else %}None{% endif %}</p>
   </div>
   <div class="actions-row">
-    <button type="button" class="ghost" id="undo-pick" disabled>Undo Last Pick</button>
-    <button type="button" class="ghost" id="reset-bracket">Reset Bracket</button>
+    {% if is_owner %}
+    <button type="button" class="ghost" id="reset-bracket">Clear All Votes</button>
+    <select id="share-mode">
+      <option value="filled">Share filled picks</option>
+      <option value="empty">Share empty bracket</option>
+    </select>
     <button type="button" id="copy-share" data-bracket-id="{{ bracket['id'] }}">Copy Share Link</button>
+    {% endif %}
     <a class="button-like ghost" href="{{ url_for('dashboard') }}">Back</a>
   </div>
 </section>
 
-<section id="action-feedback" class="action-feedback" data-state="info">Pick a winner to advance teams.</section>
+{% if is_owner %}
+<section class="card invite-card">
+  <h2>Invite Voters</h2>
+  <p class="sub">Invite by email. Votes determine each match winner in real time.</p>
+  <div class="invite-row">
+    <input type="email" id="invite-email" placeholder="friend@example.com" />
+    <button type="button" id="send-invite" data-bracket-id="{{ bracket['id'] }}">Send Invite</button>
+    <button type="button" class="ghost copy-share-btn" data-bracket-id="{{ bracket['id'] }}">Copy Share Link</button>
+  </div>
+</section>
+{% endif %}
+
+<section id="action-feedback" class="action-feedback" data-state="info">Vote any matchup to see the current standing.</section>
 
 <section id="champion-banner" class="card champion {% if not rounds[-1][0]['winner'] %}hidden{% endif %}">
   <h2>Champion: <span id="champion-name">{{ rounds[-1][0]['winner'] or '' }}</span></h2>
 </section>
 
-<section class="rounds-board" id="rounds-board" data-bracket-id="{{ bracket['id'] }}" data-rounds='{{ rounds|tojson|safe }}'>
+<section
+  class="rounds-board"
+  id="rounds-board"
+  data-bracket-id="{{ bracket['id'] }}"
+  data-rounds='{{ rounds|tojson|safe }}'
+  data-standings='{{ vote_standings|tojson|safe }}'
+>
+  <div class="zoom-controls board-zoom-controls" aria-label="Bracket zoom controls">
+    <button type="button" class="ghost" id="zoom-out">-</button>
+    <button type="button" class="ghost" id="zoom-in">+</button>
+  </div>
   {% for round in rounds %}
+    {% set round_index = loop.index0 %}
     <article class="round-column" data-round-index="{{ loop.index0 }}">
-      <h3>Round {{ loop.index }}</h3>
+      <h3 class="round-title">Round {{ loop.index }}</h3>
+      <div class="round-matches">
       {% for match in round %}
+        {% set key = round_index ~ ':' ~ loop.index0 %}
+        {% set standing = vote_standings.get(key, {}) %}
         <div class="match" data-match-index="{{ loop.index0 }}">
-          <button class="team-btn{% if match['winner'] == match['team1'] %} winner{% endif %}" {% if not match['team1'] %}disabled{% endif %} data-team="{{ match['team1'] or '' }}">{{ match['team1'] or 'TBD' }}</button>
-          <button class="team-btn{% if match['winner'] == match['team2'] %} winner{% endif %}" {% if not match['team2'] or match['team2'] == 'BYE' %}disabled{% endif %} data-team="{{ match['team2'] or '' }}">{{ match['team2'] or 'TBD' }}</button>
+          <button class="team-btn vote-btn{% if match['winner'] == match['team1'] %} winner{% endif %}{% if standing.get('my_vote') == match['team1'] %} my-vote{% endif %}" {% if not match['team1'] or match['team1'] == 'BYE' %}disabled{% endif %} data-team="{{ match['team1'] or '' }}">{{ match['team1'] or 'TBD' }}</button>
+          <button class="team-btn vote-btn{% if match['winner'] == match['team2'] %} winner{% endif %}{% if standing.get('my_vote') == match['team2'] %} my-vote{% endif %}" {% if not match['team2'] or match['team2'] == 'BYE' %}disabled{% endif %} data-team="{{ match['team2'] or '' }}">{{ match['team2'] or 'TBD' }}</button>
+          <p class="standing" data-standing-key="{{ key }}">
+            {{ standing.get('team1_votes', 0) }} - {{ standing.get('team2_votes', 0) }}
+          </p>
         </div>
       {% endfor %}
+      </div>
     </article>
   {% endfor %}
 </section>
 
 <dialog id="reset-modal" class="confirm-modal">
   <form method="dialog" class="modal-card">
-    <h3>Reset this bracket?</h3>
-    <p class="sub">This will clear all picks and keep only automatic BYE advances.</p>
+    <h3>Clear all votes?</h3>
+    <p class="sub">This returns the bracket to its original state and removes current standings.</p>
     <div class="modal-actions">
       <button type="button" class="ghost" id="cancel-reset">Cancel</button>
-      <button type="button" id="confirm-reset">Yes, Reset</button>
+      <button type="button" id="confirm-reset">Yes, Clear Votes</button>
     </div>
   </form>
 </dialog>
