@@ -11,7 +11,15 @@ from flask import Flask, flash, g, jsonify, redirect, render_template, request, 
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATABASE = os.path.join(BASE_DIR, "app.db")
+
+
+def get_database_path():
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return os.path.join("/tmp", "app.db")
+    return os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "app.db"))
+
+
+DATABASE = get_database_path()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
